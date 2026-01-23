@@ -10,6 +10,7 @@
  */
 
 %{
+#define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -99,7 +100,7 @@ NEWLINE     \n
 
 <STRING_STATE>\"        { 
                             BEGIN(INITIAL);
-                            yylval_string = strdup(string_buffer);
+                            string_buffer[string_buffer_len] = '\0';
                             return TOK_STRING;
                         }
 
@@ -385,7 +386,7 @@ NEWLINE     \n
                             if (kw != TOK_IDENTIFIER) {
                                 return kw;
                             }
-                            yylval_string = strdup(yytext);
+                            /* yylval_string will be set in lexer_next_token using yytext */
                             return TOK_IDENTIFIER;
                         }
 
@@ -534,17 +535,16 @@ Token *lexer_next_token(void) {
         
         case TOK_STRING:
             {
-                Token *t = token_create_string(yylval_string, yytext, loc);
-                free(yylval_string);
-                yylval_string = NULL;
+                /* Use string_buffer for string content */
+                string_buffer[string_buffer_len] = '\0';
+                Token *t = token_create_string(string_buffer, yytext, loc);
                 return t;
             }
         
         case TOK_IDENTIFIER:
             {
-                Token *t = token_create_identifier(yylval_string, loc);
-                free(yylval_string);
-                yylval_string = NULL;
+                /* Use yytext directly - we don't use yylval_string anymore */
+                Token *t = token_create_identifier(yytext, loc);
                 return t;
             }
         
