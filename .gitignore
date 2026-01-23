@@ -1,0 +1,48 @@
+# Documentation files (kept locally only)
+*.md
+README.md
+explanation.md
+design.md
+spec.md
+architecture.md
+infra.md
+testing.md
+roadmap.md
+
+# PDF files
+*.pdf
+Aurora Compiler Project Proposal*.pdf
+
+# Build artifacts
+build/
+*.o
+*.a
+*.so
+*.out
+lex.yy.c
+y.tab.c
+y.tab.h
+*.tab.c
+*.tab.h
+naturelang.output
+
+# Compiled binaries
+naturec
+nlc
+lexer_test
+parser_test
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Debug files
+*.dSYM/
+core
