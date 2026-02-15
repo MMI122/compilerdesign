@@ -1,13 +1,12 @@
--- NatureLang Example: Secure Zone
--- Demonstrates the secure block feature for safe execution
+-- NatureLang Example: Secure Zones
+-- Demonstrates secure zone feature for safety-critical code
 
+-- Create some global variables
 create a number called globalCounter and set it to 0
-
--- Variables created outside secure zone
-create a number called publicValue and set it to 100
+create a text called globalData and set it to "initial"
 
 -- Enter a secure zone where certain operations are restricted
-enter secure zone
+begin secure zone
     -- Can create local variables
     create a number called localTemp and set it to 5
     create a number called localResult
@@ -16,34 +15,27 @@ enter secure zone
     localResult becomes localTemp plus 10
     
     -- The following would be COMPILE-TIME ERRORS in secure zones:
-    -- publicValue becomes 50      -- ERROR: Cannot reassign external variable
-    -- display "hello"             -- ERROR: No I/O allowed
-    -- ask "input?" and remember x -- ERROR: No I/O allowed
-    -- call someFunction()         -- ERROR: No function calls allowed
+    -- - No system calls (like running external commands)
+    -- - No file operations
+    -- - No network operations
+    -- - Only local variable access
     
-    -- Pure computation is allowed
-    localResult becomes localResult multiplied by 2
-end
+    display "Secure computation complete"
+    display localResult
+end secure zone
 
--- After secure zone, normal operations resume
-publicValue becomes publicValue plus 1
-display "Secure zone example completed"
-display publicValue
+-- Alternative syntax: safely do
+safely do
+    create a number called safeCalc
+    safeCalc becomes 100 multiplied by 2
+    display "Safe calculation: "
+    display safeCalc
+end safely
 
--- Another secure zone example for safe computation
-create a number called a and set it to 10
-create a number called b and set it to 20
-create a number called safeResult
+-- Back in normal mode - can do anything
+globalCounter becomes globalCounter plus 1
+display "Normal mode counter: "
+display globalCounter
 
-enter safe zone
-    create a number called tempA and set it to a
-    create a number called tempB and set it to b
-    create a number called tempSum
-    tempSum becomes tempA plus tempB
-    -- Note: We can't assign to safeResult here because it's external
-end
-
--- Do the assignment outside the secure zone
-safeResult becomes a plus b
-display "Safe result: "
-display safeResult
+-- End message
+display "=== Secure Zone Demo Complete ==="

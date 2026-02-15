@@ -8,7 +8,25 @@
  */
 
 #define _POSIX_C_SOURCE 200809L
+
+/* Token definitions:
+ * - USE_BISON_TOKENS: Use Bison-generated header (for parser build)
+ * - Otherwise: Use tokens.h (for standalone lexer testing)
+ */
+#ifdef USE_BISON_TOKENS
+#include "naturelang.tab.h"
+#include "ast.h"  /* For SourceLocation */
+/* Define TokenType alias for Bison mode */
+typedef int TokenType;
+/* Define KeywordEntry struct locally since we don't include tokens.h */
+typedef struct {
+    const char *keyword;
+    TokenType type;
+} KeywordEntry;
+#else
 #include "tokens.h"
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -31,6 +49,7 @@ static const KeywordEntry keyword_table[] = {
     /* B */
     {"back", TOK_BACK},
     {"becomes", TOK_BECOMES},
+    {"begin", TOK_BEGIN},
     {"by", TOK_BY},
     
     /* C */
@@ -104,10 +123,12 @@ static const KeywordEntry keyword_table[] = {
     {"remember", TOK_REMEMBER},
     {"repeat", TOK_REPEAT},
     {"returns", TOK_RETURNS},
+    {"risky", TOK_RISKY},
     {"root", TOK_ROOT},
     
     /* S */
     {"safe", TOK_SAFE},
+    {"safely", TOK_SAFELY},
     {"save", TOK_SAVE},
     {"secure", TOK_SECURE},
     {"set", TOK_SET},
@@ -142,6 +163,42 @@ static const KeywordEntry keyword_table[] = {
 };
 
 static const size_t keyword_table_size = sizeof(keyword_table) / sizeof(keyword_table[0]);
+
+/* ============================================================================
+ * KEYWORD LOOKUP FUNCTION
+ * ============================================================================
+ */
+TokenType lookup_keyword(const char *str) {
+    if (str == NULL) return TOK_IDENTIFIER;
+    
+    /* Convert to lowercase for case-insensitive matching */
+    char lower[256];
+    size_t i;
+    for (i = 0; str[i] && i < 255; i++) {
+        lower[i] = tolower((unsigned char)str[i]);
+    }
+    lower[i] = '\0';
+    
+    /* Linear search (could be optimized with hash table or binary search) */
+    for (i = 0; i < keyword_table_size; i++) {
+        if (strcmp(lower, keyword_table[i].keyword) == 0) {
+            return keyword_table[i].type;
+        }
+    }
+    
+    return TOK_IDENTIFIER;
+}
+
+/* The following functions are only needed for standalone lexer mode */
+#ifndef USE_BISON_TOKENS
+
+const KeywordEntry *get_keyword_table(void) {
+    return keyword_table;
+}
+
+size_t get_keyword_table_size(void) {
+    return keyword_table_size;
+}
 
 /* ============================================================================
  * TOKEN TYPE STRING REPRESENTATIONS
@@ -222,6 +279,9 @@ static const char *token_type_strings[] = {
     [TOK_SECURE] = "SECURE",
     [TOK_ZONE] = "ZONE",
     [TOK_SAFE] = "SAFE",
+    [TOK_BEGIN] = "BEGIN",
+    [TOK_SAFELY] = "SAFELY",
+    [TOK_RISKY] = "RISKY",
     
     /* Keywords - Logical */
     [TOK_IS] = "IS",
@@ -242,6 +302,7 @@ static const char *token_type_strings[] = {
     [TOK_NOT_EQUAL_TO] = "NOT_EQUAL_TO",
     [TOK_AT_LEAST] = "AT_LEAST",
     [TOK_AT_MOST] = "AT_MOST",
+    [TOK_BETWEEN] = "BETWEEN",
     
     /* Keywords - Arithmetic */
     [TOK_PLUS] = "PLUS",
@@ -302,39 +363,6 @@ static const char *token_type_strings[] = {
     [TOK_COMMENT] = "COMMENT",
     [TOK_BLOCK_COMMENT] = "BLOCK_COMMENT",
 };
-
-/* ============================================================================
- * KEYWORD LOOKUP FUNCTION
- * ============================================================================
- */
-TokenType lookup_keyword(const char *str) {
-    if (str == NULL) return TOK_IDENTIFIER;
-    
-    /* Convert to lowercase for case-insensitive matching */
-    char lower[256];
-    size_t i;
-    for (i = 0; str[i] && i < 255; i++) {
-        lower[i] = tolower((unsigned char)str[i]);
-    }
-    lower[i] = '\0';
-    
-    /* Linear search (could be optimized with hash table or binary search) */
-    for (i = 0; i < keyword_table_size; i++) {
-        if (strcmp(lower, keyword_table[i].keyword) == 0) {
-            return keyword_table[i].type;
-        }
-    }
-    
-    return TOK_IDENTIFIER;
-}
-
-const KeywordEntry *get_keyword_table(void) {
-    return keyword_table;
-}
-
-size_t get_keyword_table_size(void) {
-    return keyword_table_size;
-}
 
 /* ============================================================================
  * TOKEN CREATION FUNCTIONS
@@ -524,3 +552,4 @@ int token_is_literal(TokenType type) {
 int token_is_type(TokenType type) {
     return (type >= TOK_TYPE_NUMBER && type <= TOK_TYPE_NOTHING);
 }
+#endif /* USE_BISON_TOKENS */

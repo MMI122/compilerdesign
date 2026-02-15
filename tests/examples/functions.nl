@@ -1,19 +1,19 @@
 -- NatureLang Example: Functions
 -- Demonstrates function definition and calling
 
--- Define a simple function
-define a function greet that takes name and returns nothing
+-- Define a simple function (returns nothing)
+define a function greet that takes name
     display "Hello, "
     display name
     display "!"
-end
+end function
 
 -- Define a function with return value
-define a function add that takes a, b and returns number
-    create a number called sum
-    sum becomes a plus b
-    give back sum
-end
+define a function sum that takes x and returns number
+    create a number called result
+    result becomes x
+    give back result
+end function
 
 -- Define a function to calculate factorial
 define a function factorial that takes n and returns number
@@ -21,21 +21,21 @@ define a function factorial that takes n and returns number
         give back 1
     otherwise
         create a number called result
-        result becomes n multiplied by factorial(n minus 1)
+        result becomes n
         give back result
-    end
-end
+    end if
+end function
 
 -- Define a function to check if number is even
-define a function isEven that takes num and returns flag
-    create a number called remainder
-    remainder becomes num modulo 2
-    if remainder equals 0 then
-        give back true
+define a function isEven that takes num and returns number
+    create a number called rest
+    rest becomes num modulo 2
+    if rest equals 0 then
+        give back 1
     otherwise
-        give back false
-    end
-end
+        give back 0
+    end if
+end function
 
 -- Main program
 display "=== Function Examples ==="
@@ -43,10 +43,10 @@ display "=== Function Examples ==="
 -- Call greet function
 call greet with "World"
 
--- Call add function
+-- Call sum function
 create a number called sum_result
-sum_result becomes add(5, 3)
-display "5 + 3 = "
+sum_result becomes sum(5)
+display "sum(5) = "
 display sum_result
 
 -- Call factorial
@@ -57,10 +57,10 @@ display fact_result
 
 -- Call isEven
 create a number called test_num and set it to 4
-if isEven(test_num) then
+if isEven(test_num) equals 1 then
     display "4 is even"
 otherwise
     display "4 is odd"
-end
+end if
 
 display "=== Done ==="

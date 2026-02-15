@@ -9,8 +9,12 @@ infra.md
 testing.md
 roadmap.md
 
-# PDF files
+# Docs folder (generated documentation)
+docs/
+
+# PDF and DOCX files
 *.pdf
+*.docx
 Aurora Compiler Project Proposal*.pdf
 
 # Build artifacts

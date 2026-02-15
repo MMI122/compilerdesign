@@ -94,6 +94,31 @@ typedef enum {
     TOK_SECURE,         /* "secure" */
     TOK_ZONE,           /* "zone" */
     TOK_SAFE,           /* "safe" */
+    TOK_BEGIN,          /* "begin" */
+    TOK_SAFELY,         /* "safely" */
+    TOK_RISKY,          /* "risky" */
+    
+    /* ========== KEYWORDS - Additional ========== */
+    TOK_THE,            /* "the" */
+    TOK_VALUE,          /* "value" */
+    TOK_CONSTANT,       /* "constant" */
+    TOK_RETURN,         /* "return" */
+    TOK_STORE,          /* "store" */
+    TOK_USER,           /* "user" */
+    TOK_CHANGE,         /* "change" */
+    
+    /* ========== KEYWORDS - List Operations ========== */
+    TOK_ADD,            /* "add" */
+    TOK_REMOVE,         /* "remove" */
+    TOK_GET,            /* "get" */
+    TOK_ITEM,           /* "item" */
+    TOK_AT,             /* "at" */
+    TOK_POSITION,       /* "position" */
+    TOK_LENGTH,         /* "length" */
+    TOK_SIZE,           /* "size" */
+    TOK_APPEND,         /* "append" */
+    TOK_FIRST,          /* "first" */
+    TOK_LAST,           /* "last" */
     
     /* ========== KEYWORDS - Logical ========== */
     TOK_IS,             /* "is" */
@@ -114,6 +139,7 @@ typedef enum {
     TOK_NOT_EQUAL_TO,   /* "not equal to" (combined) */
     TOK_AT_LEAST,       /* "at least" (>=) */
     TOK_AT_MOST,        /* "at most" (<=) */
+    TOK_BETWEEN,        /* "between" - unique NatureLang operator */
     
     /* ========== KEYWORDS - Arithmetic (natural words) ========== */
     TOK_PLUS,           /* "plus" */
@@ -183,6 +209,8 @@ typedef enum {
  * ============================================================================
  * Tracks where a token appears in source code for error reporting
  */
+#ifndef SOURCELOCATION_DEFINED
+#define SOURCELOCATION_DEFINED
 typedef struct {
     const char *filename;   /* Source file name */
     int first_line;         /* Starting line (1-based) */
@@ -190,6 +218,7 @@ typedef struct {
     int last_line;          /* Ending line */
     int last_column;        /* Ending column */
 } SourceLocation;
+#endif
 
 /* ============================================================================
  * TOKEN STRUCTURE

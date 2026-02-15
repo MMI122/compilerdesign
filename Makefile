@@ -55,16 +55,44 @@ LEXER_SRCS = $(LEXER_DIR)/tokens.c $(LEXER_DIR)/lexer_utils.c
 LEXER_MAIN = $(LEXER_DIR)/lexer_main.c
 LEXER_OBJS = $(BUILD_DIR)/lex.yy.o $(BUILD_DIR)/tokens.o $(BUILD_DIR)/lexer_utils.o
 
-# Parser sources (for future)
+# Parser sources - UNIFIED LEXER ARCHITECTURE
+# The parser uses the same naturelang.l lexer as standalone mode,
+# compiled with USE_BISON_TOKENS to use Bison-generated token values
 PARSER_BISON = $(PARSER_DIR)/naturelang.y
 PARSER_GEN_C = $(BUILD_DIR)/naturelang.tab.c
 PARSER_GEN_H = $(BUILD_DIR)/naturelang.tab.h
+PARSER_LEXER_GEN = $(BUILD_DIR)/parser_lex.yy.c
+PARSER_MAIN = $(PARSER_DIR)/parser_main.c
+# Note: parser uses parser_tokens.o (built with USE_BISON_TOKENS) instead of tokens.o
+PARSER_OBJS = $(BUILD_DIR)/naturelang.tab.o $(BUILD_DIR)/parser_lex.yy.o \
+              $(BUILD_DIR)/parser_tokens.o $(BUILD_DIR)/ast.o
+
+# AST sources
+AST_SRC = $(AST_DIR)/ast.c
+AST_HDR = $(INCLUDE_DIR)/ast.h
+
+# Semantic analysis sources
+SEMANTIC_SRCS = $(SEMANTIC_DIR)/symbol_table.c $(SEMANTIC_DIR)/semantic.c
+SEMANTIC_HDRS = $(INCLUDE_DIR)/symbol_table.h $(INCLUDE_DIR)/semantic.h
+SEMANTIC_OBJS = $(BUILD_DIR)/symbol_table.o $(BUILD_DIR)/semantic.o
+
+# Code generation sources
+CODEGEN_SRCS = $(CODEGEN_DIR)/codegen.c
+CODEGEN_HDRS = $(INCLUDE_DIR)/codegen.h
+CODEGEN_OBJS = $(BUILD_DIR)/codegen.o
+
+# Runtime library sources
+RUNTIME_DIR = runtime
+RUNTIME_SRCS = $(RUNTIME_DIR)/naturelang_runtime.c
+RUNTIME_HDRS = $(RUNTIME_DIR)/naturelang_runtime.h
+RUNTIME_OBJS = $(BUILD_DIR)/naturelang_runtime.o
 
 # ============================================================================
 # OUTPUT BINARIES
 # ============================================================================
 
 LEXER_TEST = $(BUILD_DIR)/lexer_test
+PARSER_TEST = $(BUILD_DIR)/parser_test
 COMPILER = $(BUILD_DIR)/naturec
 
 # ============================================================================
@@ -73,7 +101,7 @@ COMPILER = $(BUILD_DIR)/naturec
 
 .PHONY: all clean lexer parser test help dirs
 
-all: dirs lexer
+all: dirs lexer parser
 
 help:
 	@echo "NatureLang Compiler Build System"
@@ -81,9 +109,10 @@ help:
 	@echo "Targets:"
 	@echo "  all        - Build everything (default)"
 	@echo "  lexer      - Build lexer test program"
-	@echo "  parser     - Build parser (future)"
+	@echo "  parser     - Build parser test program"
 	@echo "  test       - Run all tests"
 	@echo "  test-lexer - Run lexer tests"
+	@echo "  test-parser- Run parser tests"
 	@echo "  clean      - Remove build artifacts"
 	@echo "  help       - Show this message"
 	@echo ""
@@ -92,9 +121,12 @@ help:
 	@echo "  BUILD_TYPE=release  - Optimized release build"
 	@echo ""
 	@echo "Examples:"
-	@echo "  make                      - Build lexer (debug)"
-	@echo "  make BUILD_TYPE=release   - Build lexer (release)"
+	@echo "  make                      - Build all (debug)"
+	@echo "  make BUILD_TYPE=release   - Build all (release)"
+	@echo "  make lexer                - Build only lexer"
+	@echo "  make parser               - Build only parser"
 	@echo "  make test-lexer           - Run lexer tests"
+	@echo "  make test-parser          - Run parser tests"
 
 # ============================================================================
 # DIRECTORY CREATION
@@ -141,12 +173,104 @@ $(LEXER_TEST): $(LEXER_OBJS) $(BUILD_DIR)/lexer_main.o
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
 # ============================================================================
+# PARSER BUILD
+# ============================================================================
+
+parser: dirs $(PARSER_TEST)
+	@echo "✓ Parser built successfully: $(PARSER_TEST)"
+
+# Generate parser C code from Bison specification
+$(PARSER_GEN_C) $(PARSER_GEN_H): $(PARSER_BISON) $(INCLUDE_DIR)/ast.h $(INCLUDE_DIR)/tokens.h
+	@echo "Generating parser from $(PARSER_BISON)..."
+	$(BISON) -d -o $(PARSER_GEN_C) $<
+
+# Generate parser lexer from the SAME Flex specification as standalone lexer
+# This ensures ONE UNIFIED LEXER for the entire project
+$(PARSER_LEXER_GEN): $(LEXER_FLEX) $(PARSER_GEN_H)
+	@echo "Generating parser lexer from $(LEXER_FLEX) (unified lexer)..."
+	$(FLEX) -o $@ $<
+
+# Compile generated parser
+$(BUILD_DIR)/naturelang.tab.o: $(PARSER_GEN_C) $(PARSER_GEN_H) $(INCLUDE_DIR)/ast.h $(INCLUDE_DIR)/tokens.h
+	@echo "Compiling generated parser..."
+	$(CC) $(CFLAGS) -I$(BUILD_DIR) -Wno-unused-function -c $(PARSER_GEN_C) -o $@
+
+# Compile parser lexer with USE_BISON_TOKENS to use Bison token definitions
+$(BUILD_DIR)/parser_lex.yy.o: $(PARSER_LEXER_GEN) $(PARSER_GEN_H)
+	@echo "Compiling parser lexer (with Bison tokens)..."
+	$(CC) $(CFLAGS) -DUSE_BISON_TOKENS -I$(BUILD_DIR) -Wno-unused-function -Wno-sign-compare -c $< -o $@
+
+# Compile tokens.c for parser with USE_BISON_TOKENS
+$(BUILD_DIR)/parser_tokens.o: $(LEXER_DIR)/tokens.c $(PARSER_GEN_H) $(INCLUDE_DIR)/tokens.h
+	@echo "Compiling tokens.c for parser (with Bison tokens)..."
+	$(CC) $(CFLAGS) -DUSE_BISON_TOKENS -I$(BUILD_DIR) -c $< -o $@
+
+# Compile AST implementation
+$(BUILD_DIR)/ast.o: $(AST_SRC) $(AST_HDR)
+	@echo "Compiling ast.c..."
+	$(CC) $(CFLAGS) -c $(AST_SRC) -o $@
+
+# ============================================================================
+# SEMANTIC ANALYSIS BUILD
+# ============================================================================
+
+# Compile symbol table
+$(BUILD_DIR)/symbol_table.o: $(SEMANTIC_DIR)/symbol_table.c $(INCLUDE_DIR)/symbol_table.h $(INCLUDE_DIR)/ast.h
+	@echo "Compiling symbol_table.c..."
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# Compile semantic analyzer
+$(BUILD_DIR)/semantic.o: $(SEMANTIC_DIR)/semantic.c $(INCLUDE_DIR)/semantic.h $(INCLUDE_DIR)/symbol_table.h $(INCLUDE_DIR)/ast.h
+	@echo "Compiling semantic.c..."
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# Build semantic analyzer components (for other targets to depend on)
+semantic: dirs $(SEMANTIC_OBJS)
+	@echo "✓ Semantic analyzer built successfully"
+
+# ============================================================================
+# CODE GENERATOR BUILD
+# ============================================================================
+
+# Compile code generator
+$(BUILD_DIR)/codegen.o: $(CODEGEN_DIR)/codegen.c $(INCLUDE_DIR)/codegen.h $(INCLUDE_DIR)/ast.h $(INCLUDE_DIR)/symbol_table.h
+	@echo "Compiling codegen.c..."
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# Build code generator (for other targets to depend on)
+codegen: dirs $(CODEGEN_OBJS)
+	@echo "✓ Code generator built successfully"
+
+# ============================================================================
+# RUNTIME LIBRARY BUILD
+# ============================================================================
+
+# Compile runtime library
+$(BUILD_DIR)/naturelang_runtime.o: $(RUNTIME_DIR)/naturelang_runtime.c $(RUNTIME_DIR)/naturelang_runtime.h
+	@echo "Compiling naturelang_runtime.c..."
+	$(CC) $(CFLAGS) -I$(RUNTIME_DIR) -c $< -o $@
+
+# Build runtime library (for other targets to depend on)
+runtime: dirs $(RUNTIME_OBJS)
+	@echo "✓ Runtime library built successfully"
+
+# Compile parser main
+$(BUILD_DIR)/parser_main.o: $(PARSER_MAIN) $(INCLUDE_DIR)/parser.h $(INCLUDE_DIR)/ast.h
+	@echo "Compiling parser_main.c..."
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# Link parser test program
+$(PARSER_TEST): $(PARSER_OBJS) $(BUILD_DIR)/parser_main.o
+	@echo "Linking parser test program..."
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+
+# ============================================================================
 # TESTING
 # ============================================================================
 
-.PHONY: test test-lexer test-examples
+.PHONY: test test-lexer test-parser test-examples
 
-test: test-lexer
+test: test-lexer test-parser
 
 test-lexer: lexer
 	@echo ""
@@ -163,6 +287,23 @@ test-lexer: lexer
 		echo "No test files found in $(EXAMPLES_DIR)/"; \
 		echo "Running lexer with sample input..."; \
 		echo 'create a number called x and set it to 42' | $(LEXER_TEST); \
+	fi
+
+test-parser: parser
+	@echo ""
+	@echo "=== Running Parser Tests ==="
+	@echo ""
+	@if [ -d "$(EXAMPLES_DIR)" ] && [ "$$(ls -A $(EXAMPLES_DIR)/*.nl 2>/dev/null)" ]; then \
+		for f in $(EXAMPLES_DIR)/*.nl; do \
+			echo "Testing: $$f"; \
+			$(PARSER_TEST) -t "$$f" || exit 1; \
+			echo ""; \
+		done; \
+		echo "✓ All parser tests passed!"; \
+	else \
+		echo "No test files found in $(EXAMPLES_DIR)/"; \
+		echo "Running parser with sample input..."; \
+		echo 'display 42' | $(PARSER_TEST) -t; \
 	fi
 
 test-interactive: lexer
