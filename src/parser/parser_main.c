@@ -15,6 +15,7 @@
 #include "parser.h"
 #include "ast.h"
 #include "ir.h"
+#include "optimizer.h"
 
 /* External from Bison */
 extern FILE *yyin;
@@ -31,6 +32,7 @@ static void print_usage(const char *prog) {
     printf("  -v, --verbose    Enable verbose output\n");
     printf("  -t, --tree       Print the AST tree\n");
     printf("  -r, --ir         Generate and print TAC IR\n");
+    printf("  -O, --optimize N Optimize IR (0=none, 1=basic, 2=full)\n");
     printf("  -q, --quiet      Suppress output (just check for errors)\n");
     printf("\nIf no file is specified, reads from stdin.\n");
     printf("\nExamples:\n");
@@ -48,21 +50,23 @@ int main(int argc, char *argv[]) {
     int verbose = 0;
     int print_tree = 0;
     int print_ir = 0;
+    int opt_level = -1;  /* -1 means not requested */
     int quiet = 0;
     const char *filename = NULL;
     
     /* Parse command line options */
     static struct option long_options[] = {
-        {"help",    no_argument, 0, 'h'},
-        {"verbose", no_argument, 0, 'v'},
-        {"tree",    no_argument, 0, 't'},
-        {"ir",      no_argument, 0, 'r'},
-        {"quiet",   no_argument, 0, 'q'},
+        {"help",     no_argument,       0, 'h'},
+        {"verbose",  no_argument,       0, 'v'},
+        {"tree",     no_argument,       0, 't'},
+        {"ir",       no_argument,       0, 'r'},
+        {"optimize", required_argument, 0, 'O'},
+        {"quiet",    no_argument,       0, 'q'},
         {0, 0, 0, 0}
     };
     
     int opt;
-    while ((opt = getopt_long(argc, argv, "hvtrq", long_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "hvtrO:q", long_options, NULL)) != -1) {
         switch (opt) {
             case 'h':
                 print_usage(argv[0]);
@@ -75,6 +79,14 @@ int main(int argc, char *argv[]) {
                 break;
             case 'r':
                 print_ir = 1;
+                break;
+            case 'O':
+                opt_level = atoi(optarg);
+                if (opt_level < 0 || opt_level > 2) {
+                    fprintf(stderr, "Invalid optimization level: %s (use 0, 1, or 2)\n", optarg);
+                    return 1;
+                }
+                print_ir = 1;  /* Implicitly show IR when optimizing */
                 break;
             case 'q':
                 quiet = 1;
@@ -143,6 +155,16 @@ int main(int argc, char *argv[]) {
         printf("\n");
         TACProgram *ir = ir_generate(ast);
         if (ir) {
+            /* Optimize if requested */
+            if (opt_level >= 0) {
+                OptOptions opts = opt_default_options((OptLevel)opt_level);
+                opts.verbose = verbose;
+                OptStats stats = ir_optimize(ir, &opts);
+                if (!quiet) {
+                    opt_print_stats(&stats);
+                    printf("\n");
+                }
+            }
             ir_print(ir);
             ir_free(ir);
         } else {

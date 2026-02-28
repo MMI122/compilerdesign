@@ -13,7 +13,7 @@ BISON = bison
 
 # Compiler flags
 CFLAGS = -Wall -Wextra -std=c11 -g -I$(INCLUDE_DIR)
-LDFLAGS = -lfl
+LDFLAGS = -lfl -lm
 
 # Debug/Release configurations
 DEBUG_FLAGS = -O0 -DDEBUG -fsanitize=address -fsanitize=undefined
@@ -82,9 +82,9 @@ CODEGEN_HDRS = $(INCLUDE_DIR)/codegen.h
 CODEGEN_OBJS = $(BUILD_DIR)/codegen.o
 
 # IR sources
-IR_SRCS = $(IR_DIR)/ir.c
-IR_HDRS = $(INCLUDE_DIR)/ir.h
-IR_OBJS = $(BUILD_DIR)/ir.o
+IR_SRCS = $(IR_DIR)/ir.c $(IR_DIR)/optimizer.c
+IR_HDRS = $(INCLUDE_DIR)/ir.h $(INCLUDE_DIR)/optimizer.h
+IR_OBJS = $(BUILD_DIR)/ir.o $(BUILD_DIR)/optimizer.o
 
 # Runtime library sources
 RUNTIME_DIR = runtime
@@ -225,6 +225,11 @@ $(BUILD_DIR)/ir.o: $(IR_DIR)/ir.c $(INCLUDE_DIR)/ir.h $(INCLUDE_DIR)/ast.h
 	@echo "Compiling ir.c..."
 	$(CC) $(CFLAGS) -c $< -o $@
 
+# Compile optimizer
+$(BUILD_DIR)/optimizer.o: $(IR_DIR)/optimizer.c $(INCLUDE_DIR)/optimizer.h $(INCLUDE_DIR)/ir.h $(INCLUDE_DIR)/ast.h
+	@echo "Compiling optimizer.c..."
+	$(CC) $(CFLAGS) -c $< -o $@
+
 # Build IR (for other targets to depend on)
 ir: dirs $(IR_OBJS)
 	@echo "✓ IR module built successfully"
@@ -274,7 +279,7 @@ runtime: dirs $(RUNTIME_OBJS)
 	@echo "✓ Runtime library built successfully"
 
 # Compile parser main
-$(BUILD_DIR)/parser_main.o: $(PARSER_MAIN) $(INCLUDE_DIR)/parser.h $(INCLUDE_DIR)/ast.h $(INCLUDE_DIR)/ir.h
+$(BUILD_DIR)/parser_main.o: $(PARSER_MAIN) $(INCLUDE_DIR)/parser.h $(INCLUDE_DIR)/ast.h $(INCLUDE_DIR)/ir.h $(INCLUDE_DIR)/optimizer.h
 	@echo "Compiling parser_main.c..."
 	$(CC) $(CFLAGS) -c $< -o $@
 
