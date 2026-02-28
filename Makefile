@@ -92,6 +92,11 @@ IR_HDRS = $(INCLUDE_DIR)/ir.h $(INCLUDE_DIR)/optimizer.h
 IR_OBJS = $(BUILD_DIR)/ir.o $(BUILD_DIR)/optimizer.o
 
 # Runtime library sources
+# Driver sources
+DRIVER_DIR = $(SRC_DIR)/driver
+DRIVER_SRC = $(DRIVER_DIR)/naturec.c
+
+# Runtime library sources
 RUNTIME_DIR = runtime
 RUNTIME_SRCS = $(RUNTIME_DIR)/naturelang_runtime.c
 RUNTIME_HDRS = $(RUNTIME_DIR)/naturelang_runtime.h
@@ -109,9 +114,9 @@ COMPILER = $(BUILD_DIR)/naturec
 # DEFAULT TARGET
 # ============================================================================
 
-.PHONY: all clean lexer parser test help dirs
+.PHONY: all clean lexer parser compiler test help dirs
 
-all: dirs lexer parser
+all: dirs lexer parser compiler
 
 help:
 	@echo "NatureLang Compiler Build System"
@@ -120,6 +125,7 @@ help:
 	@echo "  all        - Build everything (default)"
 	@echo "  lexer      - Build lexer test program"
 	@echo "  parser     - Build parser test program"
+	@echo "  compiler   - Build naturec compiler driver"
 	@echo "  test       - Run all tests"
 	@echo "  test-lexer - Run lexer tests"
 	@echo "  test-parser- Run parser tests"
@@ -297,6 +303,24 @@ $(BUILD_DIR)/parser_main.o: $(PARSER_MAIN) $(INCLUDE_DIR)/parser.h $(INCLUDE_DIR
 $(PARSER_TEST): $(PARSER_OBJS) $(BUILD_DIR)/parser_main.o $(IR_OBJS) $(IR_CODEGEN_OBJS)
 	@echo "Linking parser test program..."
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+
+# ============================================================================
+# COMPILER DRIVER BUILD
+# ============================================================================
+
+# Compile naturec driver
+$(BUILD_DIR)/naturec.o: $(DRIVER_SRC) $(INCLUDE_DIR)/parser.h $(INCLUDE_DIR)/ast.h \
+                        $(INCLUDE_DIR)/ir.h $(INCLUDE_DIR)/optimizer.h $(INCLUDE_DIR)/ir_codegen.h
+	@echo "Compiling naturec.c..."
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# Link compiler binary
+$(COMPILER): $(PARSER_OBJS) $(BUILD_DIR)/naturec.o $(IR_OBJS) $(IR_CODEGEN_OBJS)
+	@echo "Linking NatureLang compiler..."
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+
+compiler: dirs $(COMPILER)
+	@echo "✓ Compiler built successfully: $(COMPILER)"
 
 # ============================================================================
 # TESTING
