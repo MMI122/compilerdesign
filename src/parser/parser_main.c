@@ -14,6 +14,7 @@
 #include <getopt.h>
 #include "parser.h"
 #include "ast.h"
+#include "ir.h"
 
 /* External from Bison */
 extern FILE *yyin;
@@ -29,6 +30,7 @@ static void print_usage(const char *prog) {
     printf("  -h, --help       Show this help message\n");
     printf("  -v, --verbose    Enable verbose output\n");
     printf("  -t, --tree       Print the AST tree\n");
+    printf("  -r, --ir         Generate and print TAC IR\n");
     printf("  -q, --quiet      Suppress output (just check for errors)\n");
     printf("\nIf no file is specified, reads from stdin.\n");
     printf("\nExamples:\n");
@@ -45,6 +47,7 @@ static void print_usage(const char *prog) {
 int main(int argc, char *argv[]) {
     int verbose = 0;
     int print_tree = 0;
+    int print_ir = 0;
     int quiet = 0;
     const char *filename = NULL;
     
@@ -53,12 +56,13 @@ int main(int argc, char *argv[]) {
         {"help",    no_argument, 0, 'h'},
         {"verbose", no_argument, 0, 'v'},
         {"tree",    no_argument, 0, 't'},
+        {"ir",      no_argument, 0, 'r'},
         {"quiet",   no_argument, 0, 'q'},
         {0, 0, 0, 0}
     };
     
     int opt;
-    while ((opt = getopt_long(argc, argv, "hvtq", long_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "hvtrq", long_options, NULL)) != -1) {
         switch (opt) {
             case 'h':
                 print_usage(argv[0]);
@@ -68,6 +72,9 @@ int main(int argc, char *argv[]) {
                 break;
             case 't':
                 print_tree = 1;
+                break;
+            case 'r':
+                print_ir = 1;
                 break;
             case 'q':
                 quiet = 1;
@@ -129,6 +136,18 @@ int main(int argc, char *argv[]) {
         printf("\n=== Abstract Syntax Tree ===\n\n");
         ast_print(ast, 0);
         printf("\n");
+    }
+
+    /* Generate and print IR if requested */
+    if (print_ir) {
+        printf("\n");
+        TACProgram *ir = ir_generate(ast);
+        if (ir) {
+            ir_print(ir);
+            ir_free(ir);
+        } else {
+            fprintf(stderr, "IR generation failed!\n");
+        }
     }
     
     /* Clean up */

@@ -81,6 +81,11 @@ CODEGEN_SRCS = $(CODEGEN_DIR)/codegen.c
 CODEGEN_HDRS = $(INCLUDE_DIR)/codegen.h
 CODEGEN_OBJS = $(BUILD_DIR)/codegen.o
 
+# IR sources
+IR_SRCS = $(IR_DIR)/ir.c
+IR_HDRS = $(INCLUDE_DIR)/ir.h
+IR_OBJS = $(BUILD_DIR)/ir.o
+
 # Runtime library sources
 RUNTIME_DIR = runtime
 RUNTIME_SRCS = $(RUNTIME_DIR)/naturelang_runtime.c
@@ -113,6 +118,7 @@ help:
 	@echo "  test       - Run all tests"
 	@echo "  test-lexer - Run lexer tests"
 	@echo "  test-parser- Run parser tests"
+	@echo "  test-ir    - Run IR generation tests"
 	@echo "  clean      - Remove build artifacts"
 	@echo "  help       - Show this message"
 	@echo ""
@@ -211,6 +217,19 @@ $(BUILD_DIR)/ast.o: $(AST_SRC) $(AST_HDR)
 	$(CC) $(CFLAGS) -c $(AST_SRC) -o $@
 
 # ============================================================================
+# IR BUILD
+# ============================================================================
+
+# Compile IR implementation
+$(BUILD_DIR)/ir.o: $(IR_DIR)/ir.c $(INCLUDE_DIR)/ir.h $(INCLUDE_DIR)/ast.h
+	@echo "Compiling ir.c..."
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# Build IR (for other targets to depend on)
+ir: dirs $(IR_OBJS)
+	@echo "✓ IR module built successfully"
+
+# ============================================================================
 # SEMANTIC ANALYSIS BUILD
 # ============================================================================
 
@@ -255,12 +274,12 @@ runtime: dirs $(RUNTIME_OBJS)
 	@echo "✓ Runtime library built successfully"
 
 # Compile parser main
-$(BUILD_DIR)/parser_main.o: $(PARSER_MAIN) $(INCLUDE_DIR)/parser.h $(INCLUDE_DIR)/ast.h
+$(BUILD_DIR)/parser_main.o: $(PARSER_MAIN) $(INCLUDE_DIR)/parser.h $(INCLUDE_DIR)/ast.h $(INCLUDE_DIR)/ir.h
 	@echo "Compiling parser_main.c..."
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# Link parser test program
-$(PARSER_TEST): $(PARSER_OBJS) $(BUILD_DIR)/parser_main.o
+# Link parser test program (now includes IR for --ir mode)
+$(PARSER_TEST): $(PARSER_OBJS) $(BUILD_DIR)/parser_main.o $(IR_OBJS)
 	@echo "Linking parser test program..."
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
@@ -270,7 +289,7 @@ $(PARSER_TEST): $(PARSER_OBJS) $(BUILD_DIR)/parser_main.o
 
 .PHONY: test test-lexer test-parser test-examples
 
-test: test-lexer test-parser
+test: test-lexer test-parser test-ir
 
 test-lexer: lexer
 	@echo ""
@@ -309,6 +328,21 @@ test-parser: parser
 test-interactive: lexer
 	@echo "Starting interactive lexer mode..."
 	$(LEXER_TEST) -i
+
+test-ir: parser
+	@echo ""
+	@echo "=== Running IR Generation Tests ==="
+	@echo ""
+	@if [ -d "$(EXAMPLES_DIR)" ] && [ "$$(ls -A $(EXAMPLES_DIR)/*.nl 2>/dev/null)" ]; then \
+		for f in $(EXAMPLES_DIR)/*.nl; do \
+			echo "--- IR for: $$f ---"; \
+			$(PARSER_TEST) -r "$$f" || exit 1; \
+			echo ""; \
+		done; \
+		echo "✓ All IR generation tests passed!"; \
+	else \
+		echo "No test files found in $(EXAMPLES_DIR)/"; \
+	fi
 
 # ============================================================================
 # CLEANING
