@@ -81,6 +81,11 @@ CODEGEN_SRCS = $(CODEGEN_DIR)/codegen.c
 CODEGEN_HDRS = $(INCLUDE_DIR)/codegen.h
 CODEGEN_OBJS = $(BUILD_DIR)/codegen.o
 
+# IR code generation sources
+IR_CODEGEN_SRCS = $(CODEGEN_DIR)/ir_codegen.c
+IR_CODEGEN_HDRS = $(INCLUDE_DIR)/ir_codegen.h
+IR_CODEGEN_OBJS = $(BUILD_DIR)/ir_codegen.o
+
 # IR sources
 IR_SRCS = $(IR_DIR)/ir.c $(IR_DIR)/optimizer.c
 IR_HDRS = $(INCLUDE_DIR)/ir.h $(INCLUDE_DIR)/optimizer.h
@@ -261,8 +266,13 @@ $(BUILD_DIR)/codegen.o: $(CODEGEN_DIR)/codegen.c $(INCLUDE_DIR)/codegen.h $(INCL
 	@echo "Compiling codegen.c..."
 	$(CC) $(CFLAGS) -c $< -o $@
 
+# Compile IR code generator
+$(BUILD_DIR)/ir_codegen.o: $(CODEGEN_DIR)/ir_codegen.c $(INCLUDE_DIR)/ir_codegen.h $(INCLUDE_DIR)/ir.h $(INCLUDE_DIR)/ast.h
+	@echo "Compiling ir_codegen.c..."
+	$(CC) $(CFLAGS) -c $< -o $@
+
 # Build code generator (for other targets to depend on)
-codegen: dirs $(CODEGEN_OBJS)
+codegen: dirs $(CODEGEN_OBJS) $(IR_CODEGEN_OBJS)
 	@echo "✓ Code generator built successfully"
 
 # ============================================================================
@@ -279,12 +289,12 @@ runtime: dirs $(RUNTIME_OBJS)
 	@echo "✓ Runtime library built successfully"
 
 # Compile parser main
-$(BUILD_DIR)/parser_main.o: $(PARSER_MAIN) $(INCLUDE_DIR)/parser.h $(INCLUDE_DIR)/ast.h $(INCLUDE_DIR)/ir.h $(INCLUDE_DIR)/optimizer.h
+$(BUILD_DIR)/parser_main.o: $(PARSER_MAIN) $(INCLUDE_DIR)/parser.h $(INCLUDE_DIR)/ast.h $(INCLUDE_DIR)/ir.h $(INCLUDE_DIR)/optimizer.h $(INCLUDE_DIR)/ir_codegen.h
 	@echo "Compiling parser_main.c..."
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# Link parser test program (now includes IR for --ir mode)
-$(PARSER_TEST): $(PARSER_OBJS) $(BUILD_DIR)/parser_main.o $(IR_OBJS)
+# Link parser test program (now includes IR + codegen for --codegen mode)
+$(PARSER_TEST): $(PARSER_OBJS) $(BUILD_DIR)/parser_main.o $(IR_OBJS) $(IR_CODEGEN_OBJS)
 	@echo "Linking parser test program..."
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
@@ -294,7 +304,7 @@ $(PARSER_TEST): $(PARSER_OBJS) $(BUILD_DIR)/parser_main.o $(IR_OBJS)
 
 .PHONY: test test-lexer test-parser test-examples
 
-test: test-lexer test-parser test-ir
+test: test-lexer test-parser test-ir test-codegen
 
 test-lexer: lexer
 	@echo ""
@@ -345,6 +355,24 @@ test-ir: parser
 			echo ""; \
 		done; \
 		echo "✓ All IR generation tests passed!"; \
+	else \
+		echo "No test files found in $(EXAMPLES_DIR)/"; \
+	fi
+
+test-codegen: parser
+	@echo ""
+	@echo "=== Running IR Codegen Tests ==="
+	@echo ""
+	@mkdir -p $(BUILD_DIR)/generated
+	@if [ -d "$(EXAMPLES_DIR)" ] && [ "$$(ls -A $(EXAMPLES_DIR)/*.nl 2>/dev/null)" ]; then \
+		for f in $(EXAMPLES_DIR)/*.nl; do \
+			base=$$(basename $$f .nl); \
+			echo "Codegen: $$f"; \
+			$(PARSER_TEST) -c -O1 "$$f" > $(BUILD_DIR)/generated/$$base.c || exit 1; \
+			echo "  → $(BUILD_DIR)/generated/$$base.c"; \
+			echo ""; \
+		done; \
+		echo "✓ All IR codegen tests passed!"; \
 	else \
 		echo "No test files found in $(EXAMPLES_DIR)/"; \
 	fi

@@ -16,6 +16,7 @@
 #include "ast.h"
 #include "ir.h"
 #include "optimizer.h"
+#include "ir_codegen.h"
 
 /* External from Bison */
 extern FILE *yyin;
@@ -33,6 +34,7 @@ static void print_usage(const char *prog) {
     printf("  -t, --tree       Print the AST tree\n");
     printf("  -r, --ir         Generate and print TAC IR\n");
     printf("  -O, --optimize N Optimize IR (0=none, 1=basic, 2=full)\n");
+    printf("  -c, --codegen    Generate C code from IR\n");
     printf("  -q, --quiet      Suppress output (just check for errors)\n");
     printf("\nIf no file is specified, reads from stdin.\n");
     printf("\nExamples:\n");
@@ -50,6 +52,7 @@ int main(int argc, char *argv[]) {
     int verbose = 0;
     int print_tree = 0;
     int print_ir = 0;
+    int do_codegen = 0;
     int opt_level = -1;  /* -1 means not requested */
     int quiet = 0;
     const char *filename = NULL;
@@ -61,12 +64,13 @@ int main(int argc, char *argv[]) {
         {"tree",     no_argument,       0, 't'},
         {"ir",       no_argument,       0, 'r'},
         {"optimize", required_argument, 0, 'O'},
+        {"codegen",  no_argument,       0, 'c'},
         {"quiet",    no_argument,       0, 'q'},
         {0, 0, 0, 0}
     };
     
     int opt;
-    while ((opt = getopt_long(argc, argv, "hvtrO:q", long_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "hvtrO:cq", long_options, NULL)) != -1) {
         switch (opt) {
             case 'h':
                 print_usage(argv[0]);
@@ -87,6 +91,9 @@ int main(int argc, char *argv[]) {
                     return 1;
                 }
                 print_ir = 1;  /* Implicitly show IR when optimizing */
+                break;
+            case 'c':
+                do_codegen = 1;
                 break;
             case 'q':
                 quiet = 1;
@@ -133,7 +140,7 @@ int main(int argc, char *argv[]) {
         return 1;
     }
     
-    if (!quiet) {
+    if (!quiet && !do_codegen) {
         printf("Parsing successful!\n");
         
         if (ast->type == AST_PROGRAM) {
@@ -151,8 +158,7 @@ int main(int argc, char *argv[]) {
     }
 
     /* Generate and print IR if requested */
-    if (print_ir) {
-        printf("\n");
+    if (print_ir || do_codegen) {
         TACProgram *ir = ir_generate(ast);
         if (ir) {
             /* Optimize if requested */
@@ -160,12 +166,31 @@ int main(int argc, char *argv[]) {
                 OptOptions opts = opt_default_options((OptLevel)opt_level);
                 opts.verbose = verbose;
                 OptStats stats = ir_optimize(ir, &opts);
-                if (!quiet) {
+                if (!quiet && !do_codegen) {
                     opt_print_stats(&stats);
                     printf("\n");
                 }
             }
-            ir_print(ir);
+
+            if (print_ir && !do_codegen) {
+                printf("\n");
+                ir_print(ir);
+            }
+
+            /* Generate C code if requested */
+            if (do_codegen) {
+                IRCodegenOptions cg_opts = ir_codegen_default_options();
+                cg_opts.emit_comments = verbose;
+                IRCodegenResult cg_result = ir_codegen_generate(ir, &cg_opts);
+                if (cg_result.success) {
+                    printf("%s", cg_result.generated_code);
+                } else {
+                    fprintf(stderr, "Code generation failed: %s\n",
+                            cg_result.error_message);
+                }
+                ir_codegen_result_free(&cg_result);
+            }
+
             ir_free(ir);
         } else {
             fprintf(stderr, "IR generation failed!\n");
