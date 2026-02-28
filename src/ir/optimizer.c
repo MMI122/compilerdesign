@@ -785,19 +785,29 @@ static bool has_side_effect(TACOpcode op) {
 
 /* Check if a temp_id is used in any operand of any subsequent instruction */
 static bool temp_is_used_after(TACInstr *start, int temp_id) {
+    /* Scan the entire function for uses of this temp.
+     * We must check backward too because loops create back-edges:
+     * a temp defined late in the loop may be used at the loop header. */
+
+    /* Forward scan from start->next */
     for (TACInstr *instr = start->next; instr; instr = instr->next) {
         if (instr->is_dead) continue;
-        /* Check arg1 */
         if (instr->arg1.kind == OPERAND_TEMP && instr->arg1.val.temp_id == temp_id)
             return true;
-        /* Check arg2 */
         if (instr->arg2.kind == OPERAND_TEMP && instr->arg2.val.temp_id == temp_id)
             return true;
-        /* Check arg3 */
         if (instr->arg3.kind == OPERAND_TEMP && instr->arg3.val.temp_id == temp_id)
             return true;
-        /* Also check result for ASSIGN to see if we're reading from it */
-        /* Actually result is written, not read, but for DISPLAY etc the arg is read */
+    }
+    /* Backward scan from start->prev (for loop back-edges) */
+    for (TACInstr *instr = start->prev; instr; instr = instr->prev) {
+        if (instr->is_dead) continue;
+        if (instr->arg1.kind == OPERAND_TEMP && instr->arg1.val.temp_id == temp_id)
+            return true;
+        if (instr->arg2.kind == OPERAND_TEMP && instr->arg2.val.temp_id == temp_id)
+            return true;
+        if (instr->arg3.kind == OPERAND_TEMP && instr->arg3.val.temp_id == temp_id)
+            return true;
     }
     return false;
 }

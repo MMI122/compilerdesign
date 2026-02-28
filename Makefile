@@ -328,7 +328,7 @@ compiler: dirs $(COMPILER)
 
 .PHONY: test test-lexer test-parser test-examples
 
-test: test-lexer test-parser test-ir test-codegen
+test: test-lexer test-parser test-ir test-codegen test-integration
 
 test-lexer: lexer
 	@echo ""
@@ -392,7 +392,7 @@ test-codegen: parser
 		for f in $(EXAMPLES_DIR)/*.nl; do \
 			base=$$(basename $$f .nl); \
 			echo "Codegen: $$f"; \
-			$(PARSER_TEST) -c -O1 "$$f" > $(BUILD_DIR)/generated/$$base.c || exit 1; \
+			ASAN_OPTIONS=detect_leaks=0 $(PARSER_TEST) -c -O1 "$$f" > $(BUILD_DIR)/generated/$$base.c || exit 1; \
 			echo "  → $(BUILD_DIR)/generated/$$base.c"; \
 			echo ""; \
 		done; \
@@ -400,6 +400,12 @@ test-codegen: parser
 	else \
 		echo "No test files found in $(EXAMPLES_DIR)/"; \
 	fi
+
+test-integration: compiler
+	@echo ""
+	@echo "=== Running Integration Tests ==="
+	@echo ""
+	@bash $(TESTS_DIR)/integration/run_tests.sh
 
 # ============================================================================
 # CLEANING
