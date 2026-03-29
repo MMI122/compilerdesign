@@ -370,10 +370,13 @@ void symtab_warning(SymbolTable *table, SourceLocation loc, const char *format, 
     }
     fprintf(stderr, ": ");
     
-    va_list args;
-    va_start(args, format);
-    vfprintf(stderr, format, args);
-    va_end(args);
+    va_list args; /*special type of variable, ja extra argument dhore rakhar jonno use kora hoy*/
+    va_start(args, format); /*extra arguments read শুরু করে।
+দ্বিতীয় parameter format দেয়ার কারণ: compiler জানে fixed parameters কোথায় শেষ হয়েছে, সেখান থেকে variable arguments শুরু।*/
+    vfprintf(stderr, format, args); /*normal fprintf এর মতোই print করে, কিন্তু এখানে arguments list আকারে দেওয়া হয়।
+তাই fprintf না, vfprintf লাগে।
+stderr এ print করছে বলে এটা diagnostic stream (errors/warnings) হিসেবে আলাদা থাকে।*/
+    va_end(args);/*variable argument access শেষ হয়েছে, cleanup/teardown step।*/
     
     fprintf(stderr, "\n");
 }

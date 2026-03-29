@@ -683,7 +683,7 @@ double yylval_float = 0.0;
 char *yylval_string = NULL;
 char yylval_char = '\0';
 
-/* Location tracking */
+/* Location tracking first line first column last line last column*/
 SourceLocation yylloc = {NULL, 1, 1, 1, 1};
 
 /* Error tracking */

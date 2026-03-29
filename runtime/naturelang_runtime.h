@@ -24,6 +24,12 @@ typedef struct NLList {
 } NLList;
 
 /* Create a new list with initial elements (variadic) */
+/*... means those extra arguments are passed after count.
+So calls can look like:
+NLList *list = nl_list_create(3, (void*)1, (void*)2, (void*)3);
+Why it is used here:
+
+It lets the runtime create a list and optionally receive initial elements in one call.*/
 NLList *nl_list_create(int count, ...);
 
 /* Create an empty list */

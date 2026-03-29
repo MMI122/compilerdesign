@@ -751,6 +751,8 @@ static void analyze_statement(AnalyzerContext *ctx, ASTNode *node) {
 
 /* ============================================================================
  * NODE ANALYSIS (dispatches to appropriate handler)
+ * AST tree te recursive way te ghure; program/block hole child node gulo te analyze_node call kore, onno node hole statement analysis kore and analyze_statement call kore.
+ * ctx er vitor e symbol table + error state ase, tai sob recursive call eki analysis state share kore
  * ============================================================================
  */
 
@@ -788,8 +790,9 @@ static void analyze_node(AnalyzerContext *ctx, ASTNode *node) {
  */
 
 SemanticResult semantic_analyze(ASTNode *program) {
+    /* doing this to avoid uninialized garbage value */
     SemanticResult result = {0};
-    
+    /* jodi ast root null hoy analysis sombhov na */
     if (!program) {
         result.success = false;
         result.error_count = 1;
@@ -814,7 +817,9 @@ SemanticResult semantic_analyze(ASTNode *program) {
 }
 
 void semantic_result_free(SemanticResult *result) {
+    /* null-safe clean up guard */
     if (result && result->symtab) {
+        /*dangling pointer prevent kore and double free risk komay. we freed all allocated memory of symbol table by symtab_destroy */
         symtab_destroy(result->symtab);
         result->symtab = NULL;
     }

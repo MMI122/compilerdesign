@@ -31,6 +31,16 @@ typedef struct {
  */
 typedef struct {
     int success;
+    /*
+    generated_code একটা pointer, যেখানে generated C code text রাখা হয়।
+এই memory function-এর ভিতরে dynamically allocate করা হয় (malloc/realloc টাইপ)।
+তাই যে code এই result নেয়, তার কাজ হলো পরে memory free করা।
+caller must free = যে function call করেছে, সেই caller-ই free(...) করবে।
+free না করলে কী হবে:
+
+Memory leak হবে।
+বারবার compile/generate করলে RAM usage বাড়বে।
+    */
     char *generated_code;     /* Generated C source (caller must free) */
     size_t code_length;
     int error_count;

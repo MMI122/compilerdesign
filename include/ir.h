@@ -184,8 +184,24 @@ typedef struct {
     TACFunction *main_func;     /* Top-level code */
     TACFunction *functions;     /* Linked list of user functions */
     int func_count;
-
+/*
+next_temp
+This tracks the next temporary variable id, like t0, t1, t2.
+Why needed:
+IR generation creates many intermediate results that do not exist in source code.
+Example: for a + b * c, the compiler may create:
+t0 = b * c
+t1 = a + t0
+Without a counter, temp names could collide and break correctness.
+next_label
+*/
     int next_temp;              /* Counter for temporary names */
+    /*next_label
+This tracks the next control-flow label id, like L0, L1, L2.
+Why needed:
+Branching and loops need jump targets.
+Example: if/while translation needs labels for true branch, false branch, loop start, loop end.
+Unique labels are required so gotos always jump to the correct place.*/
     int next_label;             /* Counter for labels */
 
     /* Statistics */
