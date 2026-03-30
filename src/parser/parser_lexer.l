@@ -51,6 +51,30 @@ static void report_lexer_error(const char *msg);
 %x BLOCK_COMMENT
 
 /* Regular expression definitions */
+/*
+ * Backslash guide for these macros:
+ *
+ * 1) \t in [ \t\r]+
+ *    - Tab character.
+ *    - Real input sample: "create<TAB>a<TAB>number".
+ *    - The TABs are matched by {WHITESPACE}.
+ *
+ * 2) \r in [ \t\r]+
+ *    - Carriage return character (common in CRLF files).
+ *    - Real line ending bytes in Windows files: "\r\n".
+ *    - Here, \r can be consumed by {WHITESPACE}.
+ *
+ * 3) \n in NEWLINE
+ *    - Newline character.
+ *    - Real input sample:
+ *      display "A"
+ *      display "B"
+ *      The separator between lines is one \n.
+ *
+ * 4) [eE][+-]? in EXPONENT
+ *    - No backslash needed there; + and - are literal sign chars in [].
+ *    - Example matches: e10, E-2, e+7.
+ */
 DIGIT       [0-9]
 LETTER      [a-zA-Z]
 ALPHANUM    [a-zA-Z0-9_]
@@ -69,11 +93,28 @@ NEWLINE     \n
   */
 
 "--"                    { BEGIN(LINE_COMMENT); }
+ /*
+ * [^\n]*:
+ * - ^ at start of [] means negation.
+ * - \n means newline.
+ * - So [^\n]* = consume everything until newline.
+ * - Example: in "-- abc def\n", this matches " abc def".
+ */
 <LINE_COMMENT>[^\n]*    { /* consume comment content */ }
+ /*
+ * <LINE_COMMENT>\n:
+ * - Matches the actual end-of-line for line comments.
+ * - Example: "-- comment\n" triggers this rule at final \n.
+ */
 <LINE_COMMENT>\n        { handle_newline(); BEGIN(INITIAL); }
 
 "{-"                    { BEGIN(BLOCK_COMMENT); }
 <BLOCK_COMMENT>"-}"     { BEGIN(INITIAL); }
+ /*
+ * <BLOCK_COMMENT>\n:
+ * - Tracks real newlines inside block comments for accurate line numbers.
+ * - Example: "{- a\nb -}" increments current_line at \n.
+ */
 <BLOCK_COMMENT>\n       { handle_newline(); }
 <BLOCK_COMMENT>.        { /* consume block comment content */ }
 <BLOCK_COMMENT><<EOF>>  { report_lexer_error("Unterminated block comment"); return 0; }
@@ -82,6 +123,19 @@ NEWLINE     \n
   * STRING LITERALS
   * ============================================================================
   */
+
+ /*
+ * String regex escape cheat-sheet (Flex regex level):
+ * - \" matches a literal double-quote (").
+ * - \\ matches a literal backslash (\).
+ *
+ * Real examples:
+ * - Source: "hello\\nworld" -> lexer sees '\\'+'n' and stores one newline.
+ * - Source with real line break before closing quote:
+ *     "hello
+ *      world"
+ *   -> triggers unterminated string rule.
+ */
 
 \"                      { 
                             string_buffer_len = 0; 
@@ -96,12 +150,49 @@ NEWLINE     \n
                             return TOK_STRING;
                         }
 
+ /*
+ * Escape-handling rules inside STRING_STATE:
+ *
+ * 1) Core idea:
+ *    - \\ in the regex means one literal backslash in source input.
+ *
+ * 2) <STRING_STATE>\\n
+ *    - Real source: "line1\\nline2"
+ *    - yytext at this step: "\\n"
+ *    - stored char: '\n'
+ *
+ * 3) <STRING_STATE>\\t
+ *    - Real source: "col1\\tcol2" -> stores '\t'
+ *
+ * 4) <STRING_STATE>\\r
+ *    - Real source: "A\\rB" -> stores '\r'
+ *
+ * 5) <STRING_STATE>\\\\
+ *    - Real source: "C:\\\\temp" -> "\\\\" stores one '\\'
+ *
+ * 6) <STRING_STATE>\\\"
+ *    - Real source: "He said: \\\"ok\\\"" -> each "\\\"" stores '"'
+ */
 <STRING_STATE>\\n       { string_buffer[string_buffer_len++] = '\n'; }
 <STRING_STATE>\\t       { string_buffer[string_buffer_len++] = '\t'; }
 <STRING_STATE>\\r       { string_buffer[string_buffer_len++] = '\r'; }
 <STRING_STATE>\\\\      { string_buffer[string_buffer_len++] = '\\'; }
 <STRING_STATE>\\\"      { string_buffer[string_buffer_len++] = '"'; }
+ /*
+ * <STRING_STATE>\\.:
+ * - \\ matches literal backslash.
+ * - . matches one following char.
+ * - Real source: "cost\\q" -> yytext is "\\q", stores 'q'.
+ */
 <STRING_STATE>\\.       { string_buffer[string_buffer_len++] = yytext[1]; }
+ /*
+ * <STRING_STATE>\n catches real newline in an unterminated string.
+ * This is NOT the same as "\\n" escape sequence above.
+ * Real failing source:
+ *   "hello
+ *    world"
+ * Newline after hello triggers this rule.
+ */
 <STRING_STATE>\n        { 
                             report_lexer_error("Unterminated string");
                             handle_newline();
@@ -112,6 +203,16 @@ NEWLINE     \n
                             report_lexer_error("Unterminated string");
                             return 0;
                         }
+ /*
+ * <STRING_STATE>[^\\\"\n]+:
+ * - Negated class: match runs of chars that are NOT
+ *   backslash, quote, or newline.
+ * - \\ excludes backslash.
+ * - \" excludes quote.
+ * - \n excludes newline.
+ * - Real source: "name=alex\\n"
+ *   This rule first matches "name=alex", then stops at backslash.
+ */
 <STRING_STATE>[^\\\"\n]+ {
                             int len = strlen(yytext);
                             if (string_buffer_len + len < sizeof(string_buffer) - 1) {
@@ -389,6 +490,18 @@ NEWLINE     \n
   * ============================================================================
   */
 
+ /*
+ * WHITESPACE macro is [ \t\r]+:
+ * - space, tab (\t), and carriage return (\r), one or more.
+ *
+ * NEWLINE macro is \n (line-feed character).
+ *
+ * Real input sample: "create   a\tnumber\r\n"
+ * - "   \t" -> {WHITESPACE}
+ * - "\r"    -> {WHITESPACE}
+ * - "\n"    -> {NEWLINE}
+ */
+
 {WHITESPACE}            { /* Skip whitespace */ }
 {NEWLINE}               { handle_newline(); /* Skip newlines */ }
 
@@ -419,6 +532,11 @@ NEWLINE     \n
  */
 
 static void update_location(void) {
+  /*
+   * C escape meanings in this helper (not Flex regex):
+   * - '\0' : NUL terminator of C string
+   * - '\n' : newline character
+   */
     for (int i = 0; yytext[i] != '\0'; i++) {
         if (yytext[i] == '\n') {
             current_line++;

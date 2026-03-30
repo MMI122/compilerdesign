@@ -41,7 +41,7 @@ int main(int argc, char *argv[]) {
         long long age = 0;
         _t4 = "How old are you? ";
         printf("%s\n", _t4);
-        fgets(_nl_input_buffer, sizeof(_nl_input_buffer), stdin); _nl_input_buffer[strcspn(_nl_input_buffer, "\n")] = 0; age = strdup(_nl_input_buffer);
+        fgets(_nl_input_buffer, sizeof(_nl_input_buffer), stdin); _nl_input_buffer[strcspn(_nl_input_buffer, "\n")] = 0; age = nl_to_number(_nl_input_buffer);
         _t5 = "You are ";
         printf("%s\n", _t5);
         printf("%lld\n", (long long)age);

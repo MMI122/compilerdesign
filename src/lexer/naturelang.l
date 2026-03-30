@@ -100,6 +100,29 @@ static SourceLocation make_location(void);
 %x MULTI_WORD
 
 /* Regular expression definitions */
+/*
+ * Backslash guide for these macro patterns:
+ *
+ * 1) \t in [ \t\r]+
+ *    - Means: tab character (ASCII 0x09).
+ *    - Real input: "display<TAB>message".
+ *    - The TAB is matched by {WHITESPACE}.
+ *
+ * 2) \r in [ \t\r]+
+ *    - Means: carriage return (ASCII 0x0D), common in CRLF files.
+ *    - Real line ending bytes: "\r\n" (Windows style).
+ *
+ * 3) \n in NEWLINE
+ *    - Means: newline character (ASCII 0x0A).
+ *    - Real input sample:
+ *      create a number called x
+ *      display x
+ *      The separator is one \n.
+ *
+ * 4) [eE][+-]? in EXPONENT
+ *    - Backslash is NOT used here; + and - are literal signs inside a char class.
+ *    - Example matches: e10, E-3, e+7.
+ */
 DIGIT       [0-9]
 LETTER      [a-zA-Z]
 ALPHANUM    [a-zA-Z0-9_]
@@ -121,11 +144,29 @@ NEWLINE     \n
   */
 
 "--"                    { BEGIN(LINE_COMMENT); }
+ /*
+ * [^\n]* explanation:
+ * - ^ inside [] at the start means "negation".
+ * - \n means newline.
+ * - So [^\n]* means "zero or more characters that are NOT newline".
+ * - Example: for line "-- hello world", this consumes " hello world" only.
+ */
 <LINE_COMMENT>[^\n]*    { /* consume comment content */ }
+ /*
+ * <LINE_COMMENT>\n explanation:
+ * - \n is the actual line break token.
+ * - This rule ends the line-comment state exactly at end-of-line.
+ * - Example: "-- comment\n" triggers this rule on the final \n.
+ */
 <LINE_COMMENT>\n        { handle_newline(); BEGIN(INITIAL); /* no return - skip comment */ }
 
 "{-"                    { BEGIN(BLOCK_COMMENT); }
 <BLOCK_COMMENT>"-}"     { BEGIN(INITIAL); /* no return - skip comment */ }
+ /*
+ * <BLOCK_COMMENT>\n explanation:
+ * - \n here is needed to keep line/column tracking correct inside block comments.
+ * - Example: "{- line1\nline2 -}" increments line count at \n.
+ */
 <BLOCK_COMMENT>\n       { handle_newline(); }
 <BLOCK_COMMENT>.        { /* consume block comment content */ }
 
@@ -169,6 +210,23 @@ NEWLINE     \n
   * ============================================================================
   */
 
+ /*
+ * IMPORTANT: Flex patterns are regex, but they are written inside this .l file,
+ * so many escapes are "escape-of-an-escape".
+ *
+ * Mental model:
+ * - \" in a Flex regex means a literal double quote character (").
+ * - \\ means a literal backslash character (\).
+ *
+ * Real examples:
+ * - Source string: "hello\\nworld"
+ *   The sequence "\\n" is two source chars (backslash + n) and becomes one newline.
+ * - Broken source:
+ *     "hello
+ *      world"
+ *   has a real newline before closing quote and triggers unterminated-string logic.
+ */
+
 \"                      { 
                             string_buffer_len = 0; 
                             string_buffer[0] = '\0';
@@ -182,11 +240,39 @@ NEWLINE     \n
                             return TOK_STRING;
                         }
 
+ /*
+ * Escape-sequence rules inside strings:
+ *
+ * 1) <STRING_STATE>\\n
+ *    - \\ matches literal backslash.
+ *    - n matches literal letter n.
+ *    - So this rule matches two source chars: "\\n".
+ *    - Action converts it to one newline char '\n' in string_buffer.
+ *
+ * 2) <STRING_STATE>\\t and <STRING_STATE>\\r work the same way:
+ *    - "\\t" -> tab char '\t'
+ *    - "\\r" -> carriage return char '\r'
+ *
+ * 3) <STRING_STATE>\\\\
+ *    - First two backslashes in regex represent one literal backslash.
+ *    - So this pattern matches input "\\\\" (two backslashes),
+ *      then stores one backslash '\\'.
+ *
+ * 4) <STRING_STATE>\\\"
+ *    - Matches escaped quote sequence "\\\"" inside string source.
+ *    - Stores one literal double-quote character '"'.
+ */
 <STRING_STATE>\\n       { string_buffer[string_buffer_len++] = '\n'; }
 <STRING_STATE>\\t       { string_buffer[string_buffer_len++] = '\t'; }
 <STRING_STATE>\\r       { string_buffer[string_buffer_len++] = '\r'; }
 <STRING_STATE>\\\\      { string_buffer[string_buffer_len++] = '\\'; }
 <STRING_STATE>\\\"      { string_buffer[string_buffer_len++] = '"'; }
+ /*
+ * Octal escape rule: <STRING_STATE>\\[0-7]{1,3}
+ * - \\ => literal backslash in source.
+ * - [0-7]{1,3} => one to three octal digits.
+ * - Example matches: "\\0", "\\7", "\\12", "\\377".
+ */
 <STRING_STATE>\\[0-7]{1,3} {
                             int val = strtol(yytext + 1, NULL, 8);
                             if (val > 255) {
@@ -194,14 +280,32 @@ NEWLINE     \n
                             }
                             string_buffer[string_buffer_len++] = (char)val;
                         }
+ /*
+ * Hex escape rule: <STRING_STATE>\\x[0-9a-fA-F]{1,2}
+ * - \\x matches literal prefix "\\x".
+ * - [0-9a-fA-F]{1,2} matches one or two hex digits.
+ * - Example matches: "\\x0A", "\\x7f", "\\x41".
+ */
 <STRING_STATE>\\x[0-9a-fA-F]{1,2} {
                             int val = strtol(yytext + 2, NULL, 16);
                             string_buffer[string_buffer_len++] = (char)val;
                         }
+ /*
+ * Generic invalid escape rule: <STRING_STATE>\\.
+ * - \\ matches literal backslash.
+ * - . matches exactly one following character (any char except newline).
+ * - Example: "\\q" or "\\z" enters this rule and reports invalid escape.
+ */
 <STRING_STATE>\\.       { 
                             report_lexer_error("Invalid escape sequence");
                             string_buffer[string_buffer_len++] = yytext[1];
                         }
+ /*
+ * <STRING_STATE>\n rule catches an actual newline inside a still-open string.
+ * This is different from "\\n" above:
+ * - "\\n" is two source chars and valid escape.
+ * - "\n" here is a real line break in input and is an error.
+ */
 <STRING_STATE>\n        { 
                             report_lexer_error("Unterminated string (newline in string)");
                             handle_newline();
@@ -212,6 +316,17 @@ NEWLINE     \n
                             report_lexer_error("Unterminated string (end of file)");
                             return TOK_ERROR;
                         }
+ /*
+ * <STRING_STATE>[^\\\"\n]+ explanation:
+ * - [^ ... ] is negated char class (match anything EXCEPT listed chars).
+ * - \\ excludes backslash.
+ * - \" excludes quote.
+ * - \n excludes newline.
+ * - + means one or more characters.
+ *
+ * Example matched chunk: abcDEF123 (inside a string),
+ * but it stops before backslash, quote, or newline.
+ */
 <STRING_STATE>[^\\\"\n]+ {
                             int len = strlen(yytext);
                             if (string_buffer_len + len >= sizeof(string_buffer) - 1) {
@@ -226,6 +341,31 @@ NEWLINE     \n
   * CHARACTER LITERALS
   * ============================================================================
   */
+
+ /*
+ * Character literal regex escape guide:
+ *
+ * 1) \'  (pattern line below)
+ *    - Escaped single quote: matches opening quote '.
+ *
+ * 2) <CHAR_STATE>\\n\'
+ *    - \\ matches literal backslash.
+ *    - n matches literal 'n'.
+ *    - \' matches closing quote.
+ *    - Real source example: '\\n' (escaped newline char literal).
+ *
+ * 3) Same structure for '\\t' and '\\r'.
+ *
+ * 4) <CHAR_STATE>\\\\\'
+ *    - Real source example: '\\\\' (character value is one backslash).
+ *
+ * 5) <CHAR_STATE>\\'\'
+ *    - Real source example: '\\'' (character value is one single quote).
+ *
+ * 6) <CHAR_STATE>[^\\\'\n]\'
+ *    - One non-backslash, non-quote, non-newline char, then closing quote.
+ *    - Real examples: 'a', 'Z', '7'.
+ */
 
 \'                      { BEGIN(CHAR_STATE); }
 <CHAR_STATE>\\n\'       { BEGIN(INITIAL); SET_CHAR_VAL('\n'); return TOK_CHAR; }
@@ -590,6 +730,19 @@ NEWLINE     \n
   * ============================================================================
   */
 
+ /*
+ * Here NEWLINE expands to \n (actual line break char).
+ * WHITESPACE expands to [ \t\r]+:
+ * - space
+ * - tab (\t)
+ * - carriage return (\r)
+ *
+ * Real input sample: "set  x\tto 5\r\n"
+ * - "  " and "\t" are matched by {WHITESPACE}
+ * - "\r" is matched by {WHITESPACE}
+ * - "\n" is matched by {NEWLINE}
+ */
+
 {NEWLINE}               { handle_newline(); /* optionally return TOK_NEWLINE; */ }
 {WHITESPACE}            { /* ignore whitespace */ }
 
@@ -620,6 +773,12 @@ static void update_location(void) {
     yylloc.first_column = current_column;
 #endif
     
+    /*
+     * C escape note (not Flex regex here):
+     * - '\0' : NUL terminator of C string yytext
+     * - '\n' : newline character
+     * - '\t' : tab character
+     */
     for (int i = 0; yytext[i] != '\0'; i++) {
         if (yytext[i] == '\n') {
             current_line++;
@@ -658,6 +817,12 @@ static SourceLocation make_location(void) {
 
 /* Report a lexer error */
 static void report_lexer_error(const char *msg) {
+    /*
+     * "\033" is the ESC character used for ANSI terminal color sequences.
+     * Example:
+     * - "\033[1;31m" -> start bold red text
+     * - "\033[0m"    -> reset terminal style
+     */
     fprintf(stderr, "\033[1;31mLexer Error\033[0m at %s:%d:%d: %s\n",
             current_filename, current_line, current_column, msg);
 #ifndef USE_BISON_TOKENS
@@ -681,6 +846,7 @@ static void report_lexer_error(const char *msg) {
 long long yylval_int = 0;
 double yylval_float = 0.0;
 char *yylval_string = NULL;
+/* '\0' means no character assigned yet (NUL sentinel). */
 char yylval_char = '\0';
 
 /* Location tracking first line first column last line last column*/

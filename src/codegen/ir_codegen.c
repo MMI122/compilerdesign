@@ -669,6 +669,24 @@ static void emit_display(IRCGCtx *ctx, TACOperand *val) {
     }
 }
 
+/* Determine the target type for input-producing instructions (ASK/READ).
+ * Prefer declared variable type when available; otherwise fall back to resolved operand type. */
+static DataType input_target_type(IRCGCtx *ctx, TACOperand *target) {
+    if (target && target->kind == OPERAND_VAR && target->val.name) {
+        DataType declared = ctx_lookup_var_type(ctx, target->val.name);
+        if (declared != TYPE_UNKNOWN) {
+            return declared;
+        }
+    }
+
+    if (!target) {
+        return TYPE_TEXT;
+    }
+
+    DataType t = resolve_type(ctx, target);
+    return (t == TYPE_UNKNOWN) ? TYPE_TEXT : t;
+}
+
 /* ============================================================================
  * EMIT A SINGLE TAC INSTRUCTION AS C CODE
  * ============================================================================
@@ -716,8 +734,9 @@ static void emit_instruction(IRCGCtx *ctx, TACInstr *instr) {
             record_result_type(ctx, &instr->result, TYPE_TEXT);
             break;
         case TAC_ASK: case TAC_READ:
-            /* input read-এর result string/text হিসাবে ধরি। */
-            record_result_type(ctx, &instr->result, TYPE_TEXT);
+            /* input target type declaration অনুযায়ী ধরে রাখি (number/decimal/text/flag)। */
+            record_result_type(ctx, &instr->result,
+                               input_target_type(ctx, &instr->result));
             break;
         case TAC_EQ: case TAC_NEQ: case TAC_LT: case TAC_GT:
         case TAC_LTE: case TAC_GTE: case TAC_AND: case TAC_OR:
@@ -1010,7 +1029,21 @@ static void emit_instruction(IRCGCtx *ctx, TACInstr *instr) {
             emit(ctx, "fgets(_nl_input_buffer, sizeof(_nl_input_buffer), stdin); ");
             emit(ctx, "_nl_input_buffer[strcspn(_nl_input_buffer, \"\\n\")] = 0; ");
             emit_operand(ctx, &instr->result);
-            emit(ctx, " = strdup(_nl_input_buffer);\n");
+            switch (input_target_type(ctx, &instr->result)) {
+                case TYPE_NUMBER:
+                    emit(ctx, " = nl_to_number(_nl_input_buffer);\n");
+                    break;
+                case TYPE_DECIMAL:
+                    emit(ctx, " = nl_to_decimal(_nl_input_buffer);\n");
+                    break;
+                case TYPE_FLAG:
+                    emit(ctx, " = nl_to_bool(_nl_input_buffer);\n");
+                    break;
+                case TYPE_TEXT:
+                default:
+                    emit(ctx, " = strdup(_nl_input_buffer);\n");
+                    break;
+            }
             break;
 
         case TAC_READ:
@@ -1020,7 +1053,21 @@ static void emit_instruction(IRCGCtx *ctx, TACInstr *instr) {
             emit(ctx, "fgets(_nl_input_buffer, sizeof(_nl_input_buffer), stdin); ");
             emit(ctx, "_nl_input_buffer[strcspn(_nl_input_buffer, \"\\n\")] = 0; ");
             emit_operand(ctx, &instr->result);
-            emit(ctx, " = strdup(_nl_input_buffer);\n");
+            switch (input_target_type(ctx, &instr->result)) {
+                case TYPE_NUMBER:
+                    emit(ctx, " = nl_to_number(_nl_input_buffer);\n");
+                    break;
+                case TYPE_DECIMAL:
+                    emit(ctx, " = nl_to_decimal(_nl_input_buffer);\n");
+                    break;
+                case TYPE_FLAG:
+                    emit(ctx, " = nl_to_bool(_nl_input_buffer);\n");
+                    break;
+                case TYPE_TEXT:
+                default:
+                    emit(ctx, " = strdup(_nl_input_buffer);\n");
+                    break;
+            }
             break;
 
         /* ---- Functions ---- */

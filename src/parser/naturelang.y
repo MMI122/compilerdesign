@@ -182,6 +182,17 @@ static SourceLocation make_loc(void) {
 %type <dtype> type_specifier
 %type <oper> add_op mul_op rel_op
 
+/*
+ * GLR parser can build multiple parse branches and later discard losers.
+ * These destructors prevent leaks for semantic values that are discarded
+ * before becoming part of the final AST.
+ */
+%destructor { free($$); } <str_val>
+%destructor { if ($$) ast_free($$); } <node>
+%destructor { if ($$) ast_node_list_free($$); } <list>
+/* Start symbol is handed to caller via parse_result; don't auto-destroy it. */
+%destructor { } program
+
 /* Helper rules - no semantic value needed */
 
 /* Operator precedence (lowest to highest) */

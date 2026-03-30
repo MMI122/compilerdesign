@@ -415,6 +415,12 @@ void ast_free(ASTNode *node) {
         case AST_UNARY_OP:
             ast_free(node->data.unary_op.operand);
             break;
+
+        case AST_TERNARY_OP:
+            ast_free(node->data.ternary_op.operand);
+            ast_free(node->data.ternary_op.lower);
+            ast_free(node->data.ternary_op.upper);
+            break;
             
         case AST_LITERAL_STRING:
             free(node->data.literal_string.value);
